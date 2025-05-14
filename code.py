@@ -79,7 +79,7 @@ def train_features(train_df):
 def model(preprocessor, train_df):
     
     models = [RandomForestClassifier(),  
-               LogisticRegression(),
+               LogisticRegression(max_iter=1000),
                SVC()]
     
     enc = LabelEncoder()
