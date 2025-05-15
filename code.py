@@ -23,22 +23,23 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from xgboost import XGBClassifier
 
 
 
 def main():
     train_df, test_df = load_data()
-    preprocessor, train_df = train_features(train_df)
-    pipeline, enc = model(preprocessor, train_df)
+    preprocessor, X, y, enc = train_features(train_df)
+    pipeline = model(preprocessor, X, y)
     test_df = test_features(test_df)
     prediction(test_df, pipeline, enc)
     
     
 def load_data():
-    train_df = pd.read_csv(r"C:\Users\bmatt\Desktop\Esercizi_ML\Esercizio credit Score\train.csv", dtype=({"Monthly_Balance":"str"}))
-    test_df = pd.read_csv(r"C:\Users\bmatt\Desktop\Esercizi_ML\Esercizio credit Score\test.csv")
-    train_df = train_df.drop(["Name", "ID","SSN"], axis=1)
-    test_df = test_df.drop(["Name", "ID","SSN"], axis=1)
+    train_df = pd.read_csv(r"train.csv", dtype=({"Monthly_Balance":"str"}))
+    test_df = pd.read_csv(r"test.csv")
+    train_df = train_df.drop(["Name", "ID","SSN", "Payment_Behaviour"], axis=1)
+    test_df = test_df.drop(["Name", "ID","SSN", "Payment_Behaviour"], axis=1)
     return train_df, test_df
 
 
@@ -49,66 +50,66 @@ def train_features(train_df):
         train_df[colonna] = train_df[colonna].astype(str).str.replace("_", "", regex=False)
         train_df[colonna] = pd.to_numeric(train_df[colonna], errors='coerce')
         
-    train_df = train_df.dropna(subset="Credit_Score")
-    train_df_2 = train_df.drop("Credit_Score", axis=1)
+    train_df = train_df.dropna(subset=["Credit_Score"])
+    train_df = train_df.loc[(train_df["Age"] > 18) & (train_df["Age"] < 100), :]
+    train_df = train_df.loc[train_df["Interest_Rate"]<100,:]
+    train_df = train_df.loc[train_df["Num_Bank_Accounts"] >= 0,:]
+    train_df = train_df.loc[train_df["Num_of_Loan"] >= 0,:]
+    train_df = train_df.loc[train_df["Delay_from_due_date"] >= 0,:]
+    train_df = train_df.loc[train_df["Num_of_Delayed_Payment"] >= 0,:]
+    train_df = train_df.loc[train_df["Changed_Credit_Limit"] >= 0,:]
     
-    print("NAN Analysis: ")
-    categorical_columns=[]
-    for col in train_df_2.columns:
-        if train_df_2[col].dtype == 'object':
-            categorical_columns.append(col)
-            print(f"{col}: {train_df_2[col].isna().sum()}")
-            
-    numeric_columns = []
-    for col in train_df_2.columns:
-        if train_df_2[col].dtype in ["float64", "int64"]:
-            numeric_columns.append(col)
-            print(f"{col}: {train_df_2[col].isna().sum()}")
+    y = train_df["Credit_Score"]
+    X = train_df.drop("Credit_Score", axis=1)
+    
+    enc = LabelEncoder()
+    y_encoded = enc.fit_transform(y)
+    
+    categorical_columns=X.select_dtypes(include='object').columns.tolist()
+    numeric_columns = X.select_dtypes(include=['int64', 'float']).columns.tolist()
             
     cat_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
                                         ("onehot", OneHotEncoder(handle_unknown="ignore"))])
     
-    num_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy="mean")), ("scaler", StandardScaler(with_mean=False))])
+    num_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy="mean")), ("scaler", StandardScaler())])
     
     preprocessor = ColumnTransformer(transformers=[("categoric", cat_pipeline, categorical_columns),
                                                   ("num", num_pipeline, numeric_columns)])
     
-    return preprocessor, train_df
+    return preprocessor, X, y_encoded, enc
  
     
-def model(preprocessor, train_df):
+def model(preprocessor, X, y):
     
-    models = [RandomForestClassifier(),  
-               LogisticRegression(max_iter=1000),
-               SVC()]
+    pipeline = Pipeline(steps=[
+        ("prepoc", preprocessor),
+        ("model", LogisticRegression())])
     
-    enc = LabelEncoder()
+    param_grid = [
+        {
+            'model': [RandomForestClassifier()],
+            'model__n_estimators': [100, 200],
+            'model__max_depth': [None, 10]
+        },
+        {
+            'model': [LogisticRegression(max_iter=10000)],
+            'model__C': [0.1, 1.0, 10.0]
+        },
+        {
+            'model': [XGBClassifier()],
+            'model__n_estimators': [20, 60],
+            'model__max_depth': [None, 10]
+        }
+    ]
     
-    y = enc.fit_transform(train_df["Credit_Score"])
-    X = train_df.drop("Credit_Score", axis=1)
+    grid_search = GridSearchCV(pipeline, param_grid, cv=3, scoring='f1_macro', n_jobs=-1)
+    grid_search.fit(X, y)
     
-    print(f"Features shape: {X.shape}")
-    print(f"Label shape: {y.shape}")
-    
-    f1_macro_val = []
-    for model in models:
-        modello = Pipeline(steps=[("prepoc", preprocessor), ("model", model)])
-        name_modello = type(model).__name__
-        f1_macro = cross_val_score(modello, X, y, scoring="f1_macro", cv=5)
-        print("Model: ", name_modello)
-        print("Accuracy after 5-fold CV:", round(np.mean(f1_macro),2))
-        f1_macro_val.append(f1_macro)
-        # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=24)
-        # modello.fit(X_train, y_train)
-        # y_pred = modello.predict(X_test)
-        # print(classification_report(y_test, y_pred, target_names=enc.classes_))
-    
-    f1_macro_means = [np.mean(score) for score in f1_macro_val]
-    best_index = np.argmax(f1_macro_means)
-    model_best = models[best_index]
-    pipeline = Pipeline(steps=[("prepoc", preprocessor), ("model", model_best)])
-    pipeline.fit(X, y)
-    return pipeline, enc
+    print("Best Model:", type(grid_search.best_estimator_.named_steps['model']).__name__)
+    print("Best F1:", round(grid_search.best_score_, 2))
+
+    best_pipeline = grid_search.best_estimator_
+    return best_pipeline
     
     
 def test_features(test_df):
@@ -117,6 +118,14 @@ def test_features(test_df):
     for col in columns_to_num:
         test_df[col] = test_df[col].astype(str).str.replace("_", "", regex=False)
         test_df[col] = pd.to_numeric(test_df[col], errors='coerce')
+        
+    test_df = test_df.loc[(test_df["Age"] > 18) & (test_df["Age"] < 100), :]
+    test_df = test_df.loc[test_df["Interest_Rate"]<60,:]
+    test_df = test_df.loc[test_df["Num_Bank_Accounts"] >= 0,:]
+    test_df = test_df.loc[test_df["Num_of_Loan"] >= 0,:]
+    test_df = test_df.loc[test_df["Delay_from_due_date"] >= 0,:]
+    test_df = test_df.loc[test_df["Num_of_Delayed_Payment"] >= 0,:]
+    test_df = test_df.loc[test_df["Changed_Credit_Limit"] >= 0,:]
     
     return test_df
     
