@@ -29,13 +29,14 @@ Preprocessing test data
 Making predictions
 
 # 2. load_data()
-Loads the training and test datasets from CSV files. Drops non-essential columns (Name, ID, SSN) and returns cleaned DataFrames.
+Loads the training and test datasets from CSV files. Drops non-essential columns (Name, ID, SSN, Payment_Behaviour) and returns cleaned DataFrames.
 
 # 3. train_features(train_df)
 Prepares the training dataset for modeling by:
 - Cleaning and converting numerical columns from strings
-- Handling missing values
+- Handling missing and out of range values
 - Identifying categorical and numerical features.
+- Creating features and label (encoded)
   
 Creating preprocessing pipelines:
 - Categorical Pipeline: Uses SimpleImputer with a constant value and OneHotEncoder.
@@ -43,19 +44,18 @@ Creating preprocessing pipelines:
 
 _Returns:_
 - A fitted ColumnTransformer preprocessor
-- The processed training DataFrame
+- Features and labels
+- Encoder fitted
 
 # 4. model(preprocessor, train_df)
-Trains and selects the best classification model.
-Models considered: RandomForestClassifier, LogisticRegression, and SVC.
-Uses LabelEncoder to encode target labels (Credit_Score)
-Applies 5-fold cross-validation to compute f1_macro scores.
-Selects the model with the highest mean score.
+Trains and selects the best classification model after a GridSearch.
+Models considered: RandomForestClassifier, LogisticRegression, and XGBClassifier.
+Selects the model with the highest F1.
 Trains the best model on the full training set.
 
 _Returns:_
 - A fitted pipeline (preprocessing + model)
-- The label encoder
+
 
 # 5. test_features(test_df)
 Preprocesses the test dataset in the same way as the training dataset:
