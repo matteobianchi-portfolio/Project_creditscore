@@ -67,7 +67,7 @@ Preprocesses the test dataset in the same way as the training dataset:
 - Converts applicable string-based columns to numeric format
 - Handles missing and malformed values
 
-_Returns_ the cleaned test dataset.
+_Returns the cleaned test dataset._
 
 # 7. prediction(test_df, pipeline, enc)
 - Uses the trained pipeline to make predictions on the test data.
