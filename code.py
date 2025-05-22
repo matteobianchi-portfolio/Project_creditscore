@@ -61,6 +61,10 @@ def train_features(train_df):
     train_df = train_df.loc[train_df["Num_of_Delayed_Payment"] >= 0,:]
     train_df = train_df.loc[train_df["Changed_Credit_Limit"] >= 0,:]
     
+    folder = os.curdir
+    namefile = os.path.join(folder, "train_df_cleaned.csv")
+    train_df.to_csv(namefile, index=False)
+    
     y = train_df["Credit_Score"]
     X = train_df.drop("Credit_Score", axis=1)
     
